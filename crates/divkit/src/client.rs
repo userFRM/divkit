@@ -226,7 +226,7 @@ impl Divkit {
 
     /// Fetch `manifest.json`, collect `dividends-YYYY.parquet` keys, fetch
     /// each shard, and flat-concatenate all rows.
-    async fn load_all_rows(&self) -> Result<Vec<DivRow>> {
+    pub(crate) async fn load_all_rows(&self) -> Result<Vec<DivRow>> {
         let shard_keys = self.discover_shards().await?;
         let mut all_rows = Vec::new();
         for key in shard_keys {
@@ -365,7 +365,7 @@ fn filter_ticker<'a>(rows: &'a [DivRow], target: &str) -> Vec<&'a DivRow> {
 }
 
 /// Map a `DivRow` reference to a `DivEvent`.
-fn row_to_event(row: &DivRow) -> DivEvent {
+pub(crate) fn row_to_event(row: &DivRow) -> DivEvent {
     DivEvent {
         period_start: row.period_start,
         period_end: row.period_end,
@@ -384,7 +384,7 @@ fn row_to_event(row: &DivRow) -> DivEvent {
 ///
 /// - Inside a tokio multi-thread runtime: `block_in_place` + `Handle::block_on`.
 /// - Outside any runtime: spins up a minimal current-thread runtime.
-fn block<F: std::future::Future<Output = Result<T>>, T>(fut: F) -> Result<T> {
+pub(crate) fn block<F: std::future::Future<Output = Result<T>>, T>(fut: F) -> Result<T> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
         Err(_) => {

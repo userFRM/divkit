@@ -67,3 +67,6 @@ mod fetcher;
 
 mod client;
 pub use client::{annual_dividend_for, dividend_snapshot_for, dividends_for, Divkit};
+
+mod cache;
+pub use cache::DividendCache;

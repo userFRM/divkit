@@ -12,3 +12,4 @@ path = "src/main.rs"
 divkit = { path = "../crates/divkit" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+clap = { version = "4", features = ["derive"] }

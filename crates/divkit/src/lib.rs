@@ -12,3 +12,6 @@ pub use price::PriceProvider;
 
 pub mod parquet_io;
 pub use parquet_io::{read_dividends, write_dividends, DivRow};
+
+mod fetcher;
+pub(crate) use fetcher::{default_cache_dir, resolved_base_url, CachedFetcher};

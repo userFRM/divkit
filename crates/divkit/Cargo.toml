@@ -20,6 +20,9 @@ futures = { workspace = true }
 sha2 = { workspace = true }
 arrow = { workspace = true }
 parquet = { workspace = true }
+directories = "5"
 
 [dev-dependencies]
 tokio = { workspace = true }
+tempfile = "3"
+wiremock = "0.6"

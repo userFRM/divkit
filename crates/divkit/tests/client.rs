@@ -316,3 +316,142 @@ async fn checksum_mismatch_is_rejected() {
         "expected a checksum-mismatch error, got: {msg}"
     );
 }
+
+/// Finding 1 regression guard: two CIKs share ticker "DUP".
+///
+/// CIK 1001 is the older issuer (latest period_end 2022-12-31, amount 0.10).
+/// CIK 1002 is the current issuer (latest period_end 2024-12-31, amount 0.50).
+///
+/// `client.dividends("DUP")` must return only CIK 1002's rows, and the result
+/// must equal `cache.dividends("DUP")`.
+#[tokio::test]
+async fn dividends_deduplicates_cross_cik_ticker_collision() {
+    use divkit::parquet_io::{write_dividends, DivRow};
+    use divkit::{Concept, DividendCache};
+    use sha2::{Digest, Sha256};
+
+    // Build a synthetic parquet with two CIKs sharing ticker "DUP".
+    let rows = vec![
+        // Older issuer — CIK 1001, last period_end 2022-12-31.
+        DivRow {
+            cik: 1001,
+            ticker: Some("DUP".into()),
+            period_start: chrono::NaiveDate::from_ymd_opt(2022, 1, 1).unwrap(),
+            period_end: chrono::NaiveDate::from_ymd_opt(2022, 3, 31).unwrap(),
+            amount: 0.10,
+            concept: Concept::Declared,
+            accn: "old-q1".into(),
+            form: Some("10-Q".into()),
+        },
+        DivRow {
+            cik: 1001,
+            ticker: Some("DUP".into()),
+            period_start: chrono::NaiveDate::from_ymd_opt(2022, 10, 1).unwrap(),
+            period_end: chrono::NaiveDate::from_ymd_opt(2022, 12, 31).unwrap(),
+            amount: 0.10,
+            concept: Concept::Declared,
+            accn: "old-q4".into(),
+            form: Some("10-Q".into()),
+        },
+        // Current issuer — CIK 1002, last period_end 2024-12-31 (later → wins).
+        DivRow {
+            cik: 1002,
+            ticker: Some("DUP".into()),
+            period_start: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            period_end: chrono::NaiveDate::from_ymd_opt(2024, 3, 31).unwrap(),
+            amount: 0.50,
+            concept: Concept::Declared,
+            accn: "new-q1".into(),
+            form: Some("10-Q".into()),
+        },
+        DivRow {
+            cik: 1002,
+            ticker: Some("DUP".into()),
+            period_start: chrono::NaiveDate::from_ymd_opt(2024, 10, 1).unwrap(),
+            period_end: chrono::NaiveDate::from_ymd_opt(2024, 12, 31).unwrap(),
+            amount: 0.50,
+            concept: Concept::Declared,
+            accn: "new-q4".into(),
+            form: Some("10-Q".into()),
+        },
+    ];
+
+    let tmp_dir = tempfile::TempDir::new().unwrap();
+    let parquet_path = tmp_dir.path().join("dividends-2024.parquet");
+    write_dividends(&parquet_path, &rows).unwrap();
+    let parquet_bytes = std::fs::read(&parquet_path).unwrap();
+
+    let digest = {
+        let mut h = Sha256::new();
+        h.update(&parquet_bytes);
+        h.finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    };
+    let manifest = format!(r#"{{"dividends-2024.parquet": "sha256:{digest}"}}"#);
+
+    // Two servers: one for the client reference, one for the cache.
+    let server_a = MockServer::start().await;
+    let server_b = MockServer::start().await;
+    for server in [&server_a, &server_b] {
+        Mock::given(method("GET"))
+            .and(path("/manifest.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(manifest.clone()))
+            .expect(1..)
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/dividends-2024.parquet"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(parquet_bytes.clone()))
+            .expect(1..)
+            .mount(server)
+            .await;
+    }
+
+    // Client path.
+    let cache_dir_a = TempDir::new().unwrap();
+    let client_a = Divkit::new()
+        .with_base_url(server_a.uri())
+        .with_cache_dir(cache_dir_a.path().to_path_buf())
+        .with_mirror_url(None);
+    let client_events = client_a.dividends("DUP").await.unwrap();
+
+    // Must return only the current issuer's rows (CIK 1002, amount 0.50).
+    assert_eq!(
+        client_events.len(),
+        2,
+        "client.dividends(DUP) must return only CIK 1002's 2 rows; got {}",
+        client_events.len()
+    );
+    for ev in &client_events {
+        assert!(
+            (ev.amount - 0.50).abs() < 1e-9,
+            "all returned events must be from the current issuer (amount 0.50), got {}",
+            ev.amount
+        );
+    }
+
+    // Cache path must agree.
+    let cache_dir_b = TempDir::new().unwrap();
+    let client_b = Divkit::new()
+        .with_base_url(server_b.uri())
+        .with_cache_dir(cache_dir_b.path().to_path_buf())
+        .with_mirror_url(None);
+    let cache = DividendCache::hydrate_with(&client_b).await.unwrap();
+    let cache_events = cache.dividends("DUP");
+
+    assert_eq!(
+        cache_events.len(),
+        client_events.len(),
+        "cache.dividends(DUP) must return the same count as client.dividends(DUP)"
+    );
+    for (ce, cc) in client_events.iter().zip(cache_events.iter()) {
+        assert!(
+            (ce.amount - cc.amount).abs() < 1e-9,
+            "client and cache events must agree: client={} cache={}",
+            ce.amount,
+            cc.amount
+        );
+    }
+}

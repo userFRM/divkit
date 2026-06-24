@@ -204,6 +204,12 @@ impl CachedFetcher {
                                     tokio::fs::rename(&tmp_body, &cache_path).await
                                 {
                                     tracing::warn!("could not rename mirror cache file: {e}");
+                                } else {
+                                    // The mirror response carries no ETag we trust.
+                                    // Remove any stale ETag from a prior primary fetch
+                                    // so a later conditional request is not paired with
+                                    // bytes from a different origin.
+                                    let _ = tokio::fs::remove_file(&etag_path).await;
                                 }
                             }
                             return self

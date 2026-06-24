@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## [0.0.2] — 2026-06-24
+
+### Added
+
+- `DividendCache::hydrate()` / `hydrate_blocking()` — load all dividend data once into an in-memory index for O(1) synchronous lookups (`snapshot`, `annual_dividend`, `dividends`, `snapshot_by_cik`), built for high-throughput consumers that query many tickers.
+- `Frequency::Monthly` detection.
+
+### Changed
+
+- `annual_amount()` now computes the Indicated Annual Dividend (median of the last K regular payments × K) and decays to zero for stopped payers.
+
+### Fixed
+
+- Fetcher integrity: stale-cache reads are verified against the manifest digest before being served; a transient manifest-load failure no longer permanently disables verification; `Retry-After` is clamped; cache writes are atomic.
+- Dividend math: non-finite amounts can no longer panic the IAD median; `annual_amount_as_of` excludes events dated after the as-of date.
+- Builder: reconciled residuals survive deduplication; an empty or all-malformed run no longer deletes existing shards; malformed and out-of-range periods (inverted, over-long, typo'd years) are rejected.
+- Client/cache: blocking wrappers no longer panic on current-thread runtimes; the ticker index resolves CIK/ticker collisions deterministically and matches client filtering semantics.
+- Parquet reader rejects NULLs in non-nullable columns instead of coercing them to zero.
+
 ## [0.0.1] — 2026-06-24
 
 ### Added

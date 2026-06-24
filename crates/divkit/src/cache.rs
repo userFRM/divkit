@@ -171,7 +171,9 @@ impl DividendCache {
                         .as_deref()
                         .map(|t| (t.to_uppercase(), rows[i].period_end))
                 })
-                .max_by(|(_, a_end), (_, b_end)| a_end.cmp(b_end))
+                // Secondary key (ticker) makes the result deterministic when two
+                // tickers for the same CIK share the same latest period_end.
+                .max_by(|(at, ae), (bt, be)| ae.cmp(be).then(at.cmp(bt)))
                 .map(|(t, _)| t)
                 .unwrap_or_default();
 

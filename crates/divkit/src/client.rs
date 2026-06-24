@@ -369,11 +369,54 @@ fn is_dividend_shard(name: &str) -> bool {
     !year_str.is_empty() && year_str.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// Case-insensitive filter: keep rows whose `ticker` matches `target`.
+/// Case-insensitive filter: keep rows whose `ticker` matches `target`,
+/// resolving to a single issuer when multiple CIKs share the same ticker symbol.
+///
+/// When a ticker has been used by more than one CIK (e.g. a delisted company
+/// followed by a new listing under the same symbol), only the rows for the
+/// **winning CIK** are returned.  The winning CIK is the one whose most-recent
+/// `period_end` among the matched rows is latest; ties are broken by the larger
+/// CIK.  This matches the collision-resolution rule documented on
+/// [`DividendCache::hydrate_with`] so that `client.dividends(T)` and
+/// `cache.dividends(T)` always agree.
 fn filter_ticker<'a>(rows: &'a [DivRow], target: &str) -> Vec<&'a DivRow> {
     let upper = target.to_uppercase();
-    rows.iter()
+    let matching: Vec<&DivRow> = rows
+        .iter()
         .filter(|r| r.ticker.as_deref().map(|t| t.to_uppercase()) == Some(upper.clone()))
+        .collect();
+
+    if matching.is_empty() {
+        return matching;
+    }
+
+    // Resolve to the single winning CIK: latest most-recent period_end,
+    // tiebreak by larger CIK.  This is O(n) and handles the common case
+    // (single CIK) with no extra allocation.
+    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+    let mut winning_cik: u32 = 0;
+    let mut winning_latest = epoch;
+
+    // Find the most-recent period_end per CIK in a single pass.
+    let mut cik_latest: std::collections::HashMap<u32, chrono::NaiveDate> =
+        std::collections::HashMap::new();
+    for row in &matching {
+        let entry = cik_latest.entry(row.cik).or_insert(epoch);
+        if row.period_end > *entry {
+            *entry = row.period_end;
+        }
+    }
+
+    for (cik, latest) in &cik_latest {
+        if *latest > winning_latest || (*latest == winning_latest && *cik > winning_cik) {
+            winning_latest = *latest;
+            winning_cik = *cik;
+        }
+    }
+
+    matching
+        .into_iter()
+        .filter(|r| r.cik == winning_cik)
         .collect()
 }
 

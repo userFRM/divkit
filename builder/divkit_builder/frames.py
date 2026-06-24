@@ -263,6 +263,17 @@ def reconcile_periods(rows: list[Row]) -> list[Row]:
             synth_start = container.period_start
             synth_end = container.period_end
 
+        # Emit the synthesized residual row.
+        #
+        # If the residual's period is fully spanned by existing discrete leaves
+        # (i.e. no uncovered gap exists), this represents a special/extra
+        # dividend that the rollup captured but no standalone quarterly filing
+        # recorded.  The row is retained in the event history so that the full
+        # payment record is preserved, but it is correctly excluded from the
+        # Indicated Annual Dividend (IAD): the IAD algorithm uses the median of
+        # the last K regular payments, and the outlier-rejection property of the
+        # median naturally suppresses one-off specials without any explicit
+        # filtering step.
         synth = Row(
             cik=container.cik,
             period_start=synth_start,

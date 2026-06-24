@@ -83,6 +83,50 @@ def fetch_quarter(concept: str, year: int, q: int) -> list[Row]:
 
 
 # ---------------------------------------------------------------------------
+# Containment filter — drop cumulative / YTD / annual periods
+# ---------------------------------------------------------------------------
+def drop_cumulative_periods(rows: list[Row]) -> list[Row]:
+    """Remove rows whose period strictly contains another row's period for the same cik.
+
+    EDGAR XBRL companyfacts includes both discrete-quarter entries and cumulative
+    YTD / semi-annual / annual entries that span the same date range.  A cumulative
+    row *strictly contains* at least one shorter row for the same cik (its
+    ``period_start <= shorter.period_start`` AND ``shorter.period_end <=
+    period_end`` with the intervals being distinct).  Discrete quarters contain
+    nothing shorter within the same cik and are therefore kept.
+
+    A pure annual payer whose only entry spans a full year also contains nothing
+    shorter (no sub-periods exist for that cik) and is likewise kept — this is the
+    correct behaviour for companies that pay a single annual dividend.
+
+    Input order of surviving rows is preserved.
+    """
+    import datetime as _dt
+
+    def _parse(s: str) -> _dt.date:
+        return _dt.date(int(s[:4]), int(s[5:7]), int(s[8:10]))
+
+    # Index periods per cik for O(n) containment check
+    from collections import defaultdict
+    cik_periods: dict[int, list[tuple[_dt.date, _dt.date]]] = defaultdict(list)
+    for row in rows:
+        cik_periods[row.cik].append((_parse(row.period_start), _parse(row.period_end)))
+
+    def _is_cumulative(row: Row) -> bool:
+        """Return True if *row* strictly contains at least one other period for the same cik."""
+        a_start = _parse(row.period_start)
+        a_end = _parse(row.period_end)
+        for b_start, b_end in cik_periods[row.cik]:
+            if (a_start, a_end) == (b_start, b_end):
+                continue
+            if a_start <= b_start and b_end <= a_end:
+                return True
+        return False
+
+    return [row for row in rows if not _is_cumulative(row)]
+
+
+# ---------------------------------------------------------------------------
 # Deduplication — prefer Declared over CashPaid per (cik, period_end)
 # ---------------------------------------------------------------------------
 def _merge_prefer_declared(rows: list[Row]) -> list[Row]:

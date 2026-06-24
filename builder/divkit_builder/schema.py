@@ -14,7 +14,7 @@ from typing import Iterable
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .frames import Row, _merge_prefer_declared
+from .frames import Row, _merge_prefer_declared, drop_cumulative_periods
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +52,13 @@ def write_year_shards(
     """
     all_rows: list[Row] = list(rows)
 
-    # Dedup by (cik, period_end) preferring Declared
-    deduped = _merge_prefer_declared(all_rows)
+    # 1. Drop cumulative / YTD / annual periods that contain shorter discrete periods
+    #    for the same cik.  Must run before (cik, period_end) dedup so the dedup key
+    #    is unambiguous across only discrete-quarter entries.
+    filtered = drop_cumulative_periods(all_rows)
+
+    # 2. Dedup by (cik, period_end) preferring Declared
+    deduped = _merge_prefer_declared(filtered)
 
     # Sort by (cik, period_end) before grouping/writing
     deduped.sort(key=lambda r: (r.cik, r.period_end))

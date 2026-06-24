@@ -115,3 +115,40 @@ def test_write_manifest_flat_format(tmp_path):
         file_path = tmp_path / filename
         expected = hashlib.sha256(file_path.read_bytes()).hexdigest()
         assert hex_part == expected, f"digest mismatch for {filename}: got {hex_part}, expected {expected}"
+
+
+def test_write_year_shards_drops_cumulative_annual(tmp_path):
+    """Cumulative annual row that contains discrete quarters must not appear in written parquet."""
+    # cik=10 has 3 discrete quarters in 2025 + 1 annual cumulative (KO-like)
+    q1 = Row(cik=10, period_start="2025-01-01", period_end="2025-03-28",
+             amount=0.51, concept="Declared", accn="10-q1", form="10-Q")
+    q2 = Row(cik=10, period_start="2025-03-29", period_end="2025-06-27",
+             amount=0.51, concept="Declared", accn="10-q2", form="10-Q")
+    q3 = Row(cik=10, period_start="2025-06-28", period_end="2025-09-26",
+             amount=0.51, concept="Declared", accn="10-q3", form="10-Q")
+    annual = Row(cik=10, period_start="2025-01-01", period_end="2025-12-31",
+                 amount=2.04, concept="Declared", accn="10-annual", form="10-K")
+
+    # cik=20 is a pure annual payer (no sub-periods): its annual must be KEPT
+    pure_annual = Row(cik=20, period_start="2025-01-01", period_end="2025-12-31",
+                      amount=1.50, concept="Declared", accn="20-annual", form="10-K")
+
+    cik_ticker = {10: "KO", 20: "ACME"}
+    schema.write_year_shards([q1, q2, q3, annual, pure_annual], cik_ticker, str(tmp_path))
+
+    table = pq.read_table(str(tmp_path / "dividends-2025.parquet"))
+    d = table.to_pydict()
+
+    amounts = d["amount"]
+    # Cumulative annual $2.04 for cik=10 must not appear
+    assert 2.04 not in amounts, f"Cumulative annual $2.04 must not appear in parquet; amounts={amounts}"
+
+    # All 3 discrete quarters for cik=10 must survive
+    cik10_amounts = [a for cik, a in zip(d["cik"], amounts) if cik == 10]
+    assert len(cik10_amounts) == 3, f"Expected 3 quarter rows for cik=10, got {len(cik10_amounts)}"
+    assert all(a == 0.51 for a in cik10_amounts), f"All quarter amounts must be $0.51, got {cik10_amounts}"
+
+    # Pure annual payer (cik=20) must be kept
+    cik20_amounts = [a for cik, a in zip(d["cik"], amounts) if cik == 20]
+    assert len(cik20_amounts) == 1, f"Expected 1 row for pure annual payer cik=20, got {len(cik20_amounts)}"
+    assert cik20_amounts[0] == 1.50, f"Pure annual payer amount must be $1.50, got {cik20_amounts[0]}"

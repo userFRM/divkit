@@ -3,3 +3,6 @@
 
 mod error;
 pub use error::{Error, Result};
+
+mod record;
+pub use record::{Concept, DivEvent, DividendSnapshot, Frequency};

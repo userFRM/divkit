@@ -159,7 +159,11 @@ impl Divkit {
         // All matching rows share the same CIK; take it from the first.
         let cik = matching[0].cik;
         let events: Vec<DivEvent> = matching.into_iter().map(row_to_event).collect();
-        Ok(DividendSnapshot::from_events(ticker.to_uppercase(), cik, events))
+        Ok(DividendSnapshot::from_events(
+            ticker.to_uppercase(),
+            cik,
+            events,
+        ))
     }
 
     /// Trailing 12-month annual dividend for `ticker`.

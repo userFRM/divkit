@@ -24,8 +24,8 @@ use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 
-use crate::record::Concept;
 use crate::error::{Error, Result};
+use crate::record::Concept;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -121,10 +121,16 @@ pub fn write_dividends(path: &Path, rows: &[DivRow]) -> Result<()> {
 
     let cik: UInt32Array = rows.iter().map(|r| Some(r.cik)).collect();
     let ticker: StringArray = rows.iter().map(|r| r.ticker.as_deref()).collect();
-    let period_start: Date32Array = rows.iter().map(|r| Some(to_date32(r.period_start))).collect();
+    let period_start: Date32Array = rows
+        .iter()
+        .map(|r| Some(to_date32(r.period_start)))
+        .collect();
     let period_end: Date32Array = rows.iter().map(|r| Some(to_date32(r.period_end))).collect();
     let amount: Float64Array = rows.iter().map(|r| Some(r.amount)).collect();
-    let concept: StringArray = rows.iter().map(|r| Some(concept_to_str(r.concept))).collect();
+    let concept: StringArray = rows
+        .iter()
+        .map(|r| Some(concept_to_str(r.concept)))
+        .collect();
     let accn: StringArray = rows.iter().map(|r| Some(r.accn.as_str())).collect();
     let form: StringArray = rows.iter().map(|r| r.form.as_deref()).collect();
 
@@ -154,10 +160,7 @@ pub fn write_dividends(path: &Path, rows: &[DivRow]) -> Result<()> {
 ///
 /// Returns `Error::Parquet` (naming the offending column) if the column is
 /// absent or has an unexpected Arrow type, rather than panicking.
-fn column_as<'a, A: Array + 'static>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a A> {
+fn column_as<'a, A: Array + 'static>(batch: &'a RecordBatch, name: &str) -> Result<&'a A> {
     let idx = batch
         .schema()
         .index_of(name)
@@ -281,8 +284,7 @@ mod tests {
     #[test]
     #[ignore]
     fn make_fixture() {
-        let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures");
+        let fixture_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
         std::fs::create_dir_all(&fixture_dir).unwrap();
         let path = fixture_dir.join("dividends-2024.parquet");
 

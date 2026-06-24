@@ -82,9 +82,11 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Cmd::Get { ticker } => cmd_get(&ticker).await,
         Cmd::History { ticker } => cmd_history(&ticker).await,
-        Cmd::Backfill { from_year, to_year, with_bulk } => {
-            cmd_backfill(from_year, to_year, with_bulk)
-        }
+        Cmd::Backfill {
+            from_year,
+            to_year,
+            with_bulk,
+        } => cmd_backfill(from_year, to_year, with_bulk),
         Cmd::AppendToday => cmd_append_today(),
     }
 }
@@ -109,7 +111,10 @@ async fn cmd_get(ticker: &str) -> anyhow::Result<()> {
             }
         }
         Err(divkit::Error::NotFound(_)) => {
-            println!("{ticker}  no dividend history", ticker = ticker.to_uppercase());
+            println!(
+                "{ticker}  no dividend history",
+                ticker = ticker.to_uppercase()
+            );
         }
         Err(e) => return Err(e.into()),
     }
@@ -128,7 +133,10 @@ async fn cmd_history(ticker: &str) -> anyhow::Result<()> {
                 return Ok(());
             }
             // Header
-            println!("{:<12}  {:>8}  {:<10}  form", "period_end", "amount", "concept");
+            println!(
+                "{:<12}  {:>8}  {:<10}  form",
+                "period_end", "amount", "concept"
+            );
             for ev in &snap.history {
                 let concept = format!("{:?}", ev.concept);
                 let form = ev.form.as_deref().unwrap_or("-");
@@ -139,7 +147,10 @@ async fn cmd_history(ticker: &str) -> anyhow::Result<()> {
             }
         }
         Err(divkit::Error::NotFound(_)) => {
-            println!("{ticker}  no dividend history", ticker = ticker.to_uppercase());
+            println!(
+                "{ticker}  no dividend history",
+                ticker = ticker.to_uppercase()
+            );
         }
         Err(e) => return Err(e.into()),
     }
@@ -150,7 +161,11 @@ async fn cmd_history(ticker: &str) -> anyhow::Result<()> {
 // `backfill`
 // ---------------------------------------------------------------------------
 
-fn cmd_backfill(from_year: Option<u32>, to_year: Option<u32>, with_bulk: bool) -> anyhow::Result<()> {
+fn cmd_backfill(
+    from_year: Option<u32>,
+    to_year: Option<u32>,
+    with_bulk: bool,
+) -> anyhow::Result<()> {
     let mut args = vec![
         "-m".to_string(),
         "divkit_builder.build".to_string(),

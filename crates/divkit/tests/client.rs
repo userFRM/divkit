@@ -11,8 +11,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 /// SHA-256 (hex) of `tests/fixtures/dividends-2024.parquet` at commit time.
 ///
 /// Regenerate with: `sha256sum crates/divkit/tests/fixtures/dividends-2024.parquet`
-const FIXTURE_SHA256: &str =
-    "d0fe742c4c6de9147ed28e8bb85f82949361dbe64851603f1e2385fa1342ddd9";
+const FIXTURE_SHA256: &str = "d0fe742c4c6de9147ed28e8bb85f82949361dbe64851603f1e2385fa1342ddd9";
 
 /// Load the committed parquet fixture as bytes.
 fn fixture_bytes() -> Vec<u8> {
@@ -74,10 +73,7 @@ async fn annual_dividend_known_ticker() {
         "KO is in the fixture — annual_dividend must return Some(_)"
     );
     let amount = annual.unwrap();
-    assert!(
-        (amount - 1.94).abs() < 1e-9,
-        "expected ~1.94, got {amount}"
-    );
+    assert!((amount - 1.94).abs() < 1e-9, "expected ~1.94, got {amount}");
 }
 
 /// Unknown-ticker path: ticker absent from all shards → Ok(None).
@@ -261,8 +257,8 @@ async fn checksum_mismatch_is_rejected() {
     // path), so assert on the rendered message naming the mismatch.
     let err = result.unwrap_err();
     let msg = err.to_string();
-    let is_checksum = matches!(err, Error::ChecksumMismatch { .. })
-        || msg.contains("checksum mismatch");
+    let is_checksum =
+        matches!(err, Error::ChecksumMismatch { .. }) || msg.contains("checksum mismatch");
     assert!(
         is_checksum,
         "expected a checksum-mismatch error, got: {msg}"

@@ -478,8 +478,7 @@ pub(crate) const DEFAULT_BASE_URL: &str =
 ///
 /// jsDelivr automatically mirrors public GitHub repos at no cost. Cache is
 /// invalidated on each new commit. Override at runtime via `$DIVKIT_MIRROR_URL`.
-pub(crate) const DEFAULT_MIRROR_URL: &str =
-    "https://cdn.jsdelivr.net/gh/userFRM/divkit@main/data";
+pub(crate) const DEFAULT_MIRROR_URL: &str = "https://cdn.jsdelivr.net/gh/userFRM/divkit@main/data";
 
 /// Resolve the base URL from the environment or use the default.
 pub(crate) fn resolved_base_url() -> String {
@@ -762,8 +761,7 @@ mod tests {
         let cache_file = cache_dir.path().join("dividends-2020.parquet");
         tokio::fs::write(&cache_file, stale_body).await.unwrap();
 
-        let mut fetcher =
-            CachedFetcher::new(http, server.uri(), cache_dir.path().to_path_buf());
+        let mut fetcher = CachedFetcher::new(http, server.uri(), cache_dir.path().to_path_buf());
         fetcher.set_mirror_url(None);
 
         let result = fetcher.fetch("dividends-2020").await.unwrap();

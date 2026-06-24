@@ -14,7 +14,11 @@ pub enum Error {
     #[error("parquet error: {0}")]
     ParquetNative(#[from] parquet::errors::ParquetError),
     #[error("checksum mismatch for {file}: expected sha256:{expected} got sha256:{actual}")]
-    ChecksumMismatch { file: String, expected: String, actual: String },
+    ChecksumMismatch {
+        file: String,
+        expected: String,
+        actual: String,
+    },
     #[error("not found: {0}")]
     NotFound(String),
     #[error("build error: {0}")]

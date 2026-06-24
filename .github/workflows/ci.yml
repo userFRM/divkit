@@ -52,12 +52,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install builder
-        run: pip install -e builder
+        run: pip install -e builder pytest ruff
 
       - name: Lint (ruff)
-        run: |
-          pip install ruff
-          ruff check builder
+        run: ruff check builder
 
       - name: Tests (pytest)
         run: pytest builder/tests

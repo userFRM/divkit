@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .venv/
 /builder/.cache/
+
+# bulk download artifact (never commit)
+companyfacts.zip
+data/companyfacts.zip
+*.part

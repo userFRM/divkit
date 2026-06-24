@@ -41,6 +41,26 @@ def _date_from_str(s: str) -> datetime.date | None:
         return None
 
 
+def _is_sane_period(row: Row) -> bool:
+    """Reject malformed XBRL periods: inverted, implausibly long, or typo'd years.
+
+    A single dividend period never exceeds ~one year; period_end must not predate
+    period_start; and the year must fall in the XBRL era through next year (guards
+    data-entry typos such as a 2108 end date).
+    """
+    start = _date_from_str(row.period_start)
+    end = _date_from_str(row.period_end)
+    if start is None or end is None:
+        return False
+    if end < start:
+        return False
+    if (end - start).days > 400:
+        return False
+    if not (2008 <= end.year <= datetime.date.today().year + 1):
+        return False
+    return True
+
+
 def write_year_shards(
     rows: Iterable[Row],
     cik_ticker: dict[int, str],
@@ -50,7 +70,7 @@ def write_year_shards(
 
     Returns sorted list of written file paths.
     """
-    all_rows: list[Row] = list(rows)
+    all_rows: list[Row] = [r for r in rows if _is_sane_period(r)]
 
     # 1. Reconcile cumulative / YTD / annual periods against the discrete leaves they
     #    contain.  Containers are dropped; a synthetic leaf is emitted when the leaf
@@ -132,6 +152,14 @@ def write_year_shards(
         path = os.path.join(out_dir, f"dividends-{year}.parquet")
         pq.write_table(table, path)
         written.append(path)
+
+    # Remove stale shard files for years no longer present (e.g. after a malformed
+    # date is filtered out), so they cannot linger in the served data set.
+    written_set = set(written)
+    for existing in glob.glob(os.path.join(out_dir, "dividends-*.parquet")):
+        if existing not in written_set:
+            os.remove(existing)
+            logger.warning("schema: removed stale shard %s", existing)
 
     return sorted(written)
 

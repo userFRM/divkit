@@ -168,3 +168,23 @@ def test_write_year_shards_reconciles_cumulative_annual(tmp_path):
     cik20_amounts = [a for cik, a in zip(d["cik"], amounts) if cik == 20]
     assert len(cik20_amounts) == 1, f"Expected 1 row for pure annual payer cik=20, got {len(cik20_amounts)}"
     assert cik20_amounts[0] == 1.50, f"Pure annual payer amount must be $1.50, got {cik20_amounts[0]}"
+
+
+def test_is_sane_period_rejects_malformed():
+    from divkit_builder.schema import _is_sane_period
+    from divkit_builder.frames import Row
+
+    def mk(s, e):
+        return Row(cik=1, period_start=s, period_end=e, amount=0.1,
+                   concept="Declared", accn="a", form=None)
+
+    # normal quarter — kept
+    assert _is_sane_period(mk("2024-01-01", "2024-03-31"))
+    # typo'd far-future year (2108) — rejected
+    assert not _is_sane_period(mk("2018-05-10", "2108-05-10"))
+    # inverted (end before start) — rejected
+    assert not _is_sane_period(mk("2024-03-31", "2024-01-01"))
+    # implausibly long (> ~1 year) — rejected
+    assert not _is_sane_period(mk("2020-01-01", "2023-01-01"))
+    # pre-XBRL year — rejected
+    assert not _is_sane_period(mk("2001-01-01", "2001-03-31"))

@@ -1,6 +1,6 @@
 # divkit
 
-US equity dividend service for Rust — trailing-year annual dividend, payment
+US equity dividend service for Rust — Indicated Annual Dividend, payment
 frequency, and yield calculation, served from bundled parquet shards sourced
 from SEC EDGAR public-domain XBRL filings. No API keys. Offline after first
 query.
@@ -90,7 +90,7 @@ Pass the result as the annual-dividend (or dividend-yield) argument to your
 option-pricing or Greeks routine.
 
 > [!TIP]
-> `annual_amount()` is anchored to the **most recently reported** dividend (so EDGAR filing lag does not undercount active payers) and decays to `0.0` once the last dividend is older than ~400 days — a company that stopped paying reads as a non-payer, not as stale data.
+> `annual_amount()` returns the **Indicated Annual Dividend (IAD)** — the median of the last K regular payments times K, where K is the detected payment frequency (monthly 12, quarterly 4, semi-annual 2, annual 1). Using the median rejects special dividends and XBRL period-rollup anomalies, the same way institutional dividend feeds compute IAD. It decays to `0.0` once the most recent dividend is older than ~400 days, so a company that stopped paying reads as a non-payer rather than stale data.
 
 ## Data source and limitations
 
@@ -98,14 +98,21 @@ Data comes from SEC EDGAR public-domain XBRL filings. The primary concept is
 `CommonStockDividendsPerShareDeclared`; `CommonStockDividendsPerShareCashPaid`
 is used as a fallback when the primary concept is absent.
 
-The committed database holds **82,919 dividend observations across 2009–2026
-(18 annual shards, ~1.4 MB)**.
+XBRL reports dividends in overlapping period contexts (discrete quarters plus
+cumulative year-to-date and annual rollups). divkit reconciles these into
+discrete payments — reconstructing a missing discrete period from a rollup
+where needed (e.g. an issuer that files Q1–Q3 quarterly and rolls Q4 into the
+annual figure) — so amounts are neither double-counted nor dropped.
+
+The committed database holds **111,370 reconciled dividend observations across
+2009–2026, every US SEC XBRL dividend filer** (frames sweep plus the
+companyfacts bulk completeness pass).
 
 > [!CAUTION]
 > **divkit gives dividend _amounts_ and the two fiscal-period dates (`period_start`, `period_end`) — NOT ex-dividend dates, record dates, or pay dates.** SEC EDGAR does not publish those in structured form. divkit is the source for annual dividend, payment frequency, and dividend yield. It is **not** an ex-date calendar or a forward dividend schedule. If you need ex-dates, use a dedicated (licensed) corporate-actions feed.
 
 > [!NOTE]
-> Coverage is **US SEC XBRL filers, 2009 onward** — structured XBRL dividend reporting did not exist before ~2009, so there is no earlier history. The most recent one or two quarters may lag until issuers file. This is comprehensive for US dividend-payers in the XBRL era, not a claim of universal history.
+> Coverage is **US SEC XBRL filers, 2009 onward** — structured XBRL dividend reporting did not exist before ~2009, so there is no earlier history. The most recent one or two quarters may lag until issuers file. This is comprehensive for US dividend-payers in the XBRL era, not a claim of universal history. Frequency detection and IAD are most accurate for regular quarterly and monthly payers; a small number of issuers with irregular or internally inconsistent XBRL period reporting may have an approximate annual figure.
 
 > [!IMPORTANT]
 > The data is refreshed automatically by GitHub Actions (`nightly.yml` daily; `backfill.yml` for a full rebuild). The published crate reads pre-built parquet from the repo — it never calls SEC at runtime and needs no API key.
@@ -140,8 +147,8 @@ The committed database holds **82,919 dividend observations across 2009–2026
 
 | Method | Description |
 |---|---|
-| `annual_amount()` | Trailing 12-month dividend sum |
-| `frequency()` | Detected payment frequency (`Quarterly`, `SemiAnnual`, `Annual`, `Irregular`, `None`) |
+| `annual_amount()` | Indicated Annual Dividend — median of last K payments × K |
+| `frequency()` | Detected payment frequency (`Monthly`, `Quarterly`, `SemiAnnual`, `Annual`, `Irregular`, `None`) |
 | `yield_on(price: f64)` | `annual_amount() / price` |
 | `yield_with(&PriceProvider)` | Async yield using a caller-supplied price source |
 

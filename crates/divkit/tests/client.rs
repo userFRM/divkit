@@ -39,7 +39,13 @@ fn manifest_body() -> String {
 // Tests
 // ---------------------------------------------------------------------------
 
-/// Known-ticker path: KO has 4×$0.485 = $1.94 trailing annual dividend.
+/// Known-ticker path: KO is present in the fixture; annual_dividend returns Some(_).
+///
+/// The fixture contains 2024 events. When queried today the trailing-365d window
+/// relative to now may not include those events (the fixture is static), so we
+/// assert `Some(_)` rather than a specific value. The exact trailing-sum logic is
+/// covered by `record::tests::annual_amount_sums_trailing_year` using
+/// `annual_amount_as_of` with a fixed anchor.
 #[tokio::test]
 async fn annual_dividend_known_ticker() {
     let server = MockServer::start().await;
@@ -72,8 +78,6 @@ async fn annual_dividend_known_ticker() {
         annual.is_some(),
         "KO is in the fixture — annual_dividend must return Some(_)"
     );
-    let amount = annual.unwrap();
-    assert!((amount - 1.94).abs() < 1e-9, "expected ~1.94, got {amount}");
 }
 
 /// Unknown-ticker path: ticker absent from all shards → Ok(None).
@@ -140,6 +144,10 @@ async fn dividends_for_known_ticker() {
 }
 
 /// `dividend_snapshot` builds a `DividendSnapshot` with the correct ticker and CIK.
+///
+/// The fixture contains 4 KO events in 2024.  Use `annual_amount_as_of` anchored
+/// to 2024-12-13 so the trailing-365d assertion is deterministic regardless of
+/// when this test runs.
 #[tokio::test]
 async fn dividend_snapshot_for_known_ticker() {
     let server = MockServer::start().await;
@@ -169,7 +177,9 @@ async fn dividend_snapshot_for_known_ticker() {
     assert_eq!(snap.ticker, "KO");
     assert_eq!(snap.cik, 21344);
     assert_eq!(snap.history.len(), 4);
-    assert!((snap.annual_amount() - 1.94).abs() < 1e-9);
+    // Anchor to the last fixture event date for a deterministic result.
+    let as_of = chrono::NaiveDate::from_ymd_opt(2024, 12, 13).unwrap();
+    assert!((snap.annual_amount_as_of(as_of) - 1.94).abs() < 1e-9);
 }
 
 /// Blocking wrapper works from synchronous context.
@@ -204,8 +214,10 @@ fn annual_dividend_blocking_known_ticker() {
         .with_mirror_url(None);
 
     let annual = client.annual_dividend_blocking("KO").unwrap();
+    // KO is present in the 2024 fixture — blocking variant must return Some(_).
+    // The exact sum depends on today's date (the trailing-365d window is live).
+    // Value correctness is covered by record::tests::annual_amount_sums_trailing_year.
     assert!(annual.is_some());
-    assert!((annual.unwrap() - 1.94).abs() < 1e-9);
 }
 
 /// Negative test: proves SHA-256 verification is actually active.

@@ -24,5 +24,6 @@ directories = "5"
 
 [dev-dependencies]
 tokio = { workspace = true }
+chrono = { workspace = true }
 tempfile = "3"
 wiremock = "0.6"

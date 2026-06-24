@@ -21,12 +21,19 @@ fn fixture_bytes() -> Vec<u8> {
         .expect("fixture parquet must exist — run `cargo test --test parquet_io make_fixture -- --ignored` first")
 }
 
-/// Build the manifest JSON body: lists the shard with its sha256 digest so the
-/// fetcher's verification path is exercised.
+/// Build a manifest JSON body in the FLAT format the fetcher actually reads:
+/// `{"<file>.parquet": "sha256:<hex>"}` — a `HashMap<String, String>` where the
+/// value carries a `sha256:` prefix. The fetcher strips that prefix and compares
+/// against the digest of the served bytes. A NESTED form (`{"sha256": "<hex>"}`)
+/// would fail to deserialize and silently disable verification — so this shape
+/// is load-bearing for the verification path to run at all.
+fn manifest_body_with_digest(hex: &str) -> String {
+    format!(r#"{{"dividends-2024.parquet": "sha256:{hex}"}}"#)
+}
+
+/// Manifest listing the shard with its CORRECT sha256 — verification passes.
 fn manifest_body() -> String {
-    format!(
-        r#"{{"dividends-2024.parquet": "sha256:{FIXTURE_SHA256}"}}"#
-    )
+    manifest_body_with_digest(FIXTURE_SHA256)
 }
 
 // ---------------------------------------------------------------------------
@@ -203,4 +210,61 @@ fn annual_dividend_blocking_known_ticker() {
     let annual = client.annual_dividend_blocking("KO").unwrap();
     assert!(annual.is_some());
     assert!((annual.unwrap() - 1.94).abs() < 1e-9);
+}
+
+/// Negative test: proves SHA-256 verification is actually active.
+///
+/// Serves the genuine fixture parquet but advertises a WRONG digest in the
+/// manifest (all-zeros hex). The fetcher must detect the mismatch and surface
+/// an error instead of returning the bytes. This guards against a regression
+/// that silently disables verification (e.g. a manifest-shape mismatch).
+#[tokio::test]
+async fn checksum_mismatch_is_rejected() {
+    use divkit::Error;
+
+    let server = MockServer::start().await;
+    let parquet = fixture_bytes();
+
+    // Manifest advertises a digest that does NOT match the served bytes.
+    let bad_digest = "0".repeat(64);
+    Mock::given(method("GET"))
+        .and(path("/manifest.json"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(manifest_body_with_digest(&bad_digest)),
+        )
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    // Serve the genuine fixture — its real digest differs from the manifest's.
+    Mock::given(method("GET"))
+        .and(path("/dividends-2024.parquet"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(parquet))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    let cache_dir = TempDir::new().unwrap();
+    let client = Divkit::new()
+        .with_base_url(server.uri())
+        .with_cache_dir(cache_dir.path().to_path_buf())
+        .with_mirror_url(None);
+
+    let result = client.annual_dividend("KO").await;
+    assert!(
+        result.is_err(),
+        "a digest mismatch must surface as an error, not be silently ignored"
+    );
+
+    // The error chain must report a checksum mismatch. The client wraps fetch
+    // errors in `Error::Other` (via `fetch {key}: {e}` in the single-flight
+    // path), so assert on the rendered message naming the mismatch.
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    let is_checksum = matches!(err, Error::ChecksumMismatch { .. })
+        || msg.contains("checksum mismatch");
+    assert!(
+        is_checksum,
+        "expected a checksum-mismatch error, got: {msg}"
+    );
 }

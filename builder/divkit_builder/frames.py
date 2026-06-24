@@ -100,6 +100,10 @@ def drop_cumulative_periods(rows: list[Row]) -> list[Row]:
     correct behaviour for companies that pay a single annual dividend.
 
     Input order of surviving rows is preserved.
+
+    .. deprecated::
+        Use :func:`reconcile_periods` instead.  This function silently drops the
+        container without recovering the residual discrete period (e.g. KO Q4).
     """
     import datetime as _dt
 
@@ -124,6 +128,152 @@ def drop_cumulative_periods(rows: list[Row]) -> list[Row]:
         return False
 
     return [row for row in rows if not _is_cumulative(row)]
+
+
+# ---------------------------------------------------------------------------
+# Period reconciliation — recover discrete residuals from cumulative rollups
+# ---------------------------------------------------------------------------
+def reconcile_periods(rows: list[Row]) -> list[Row]:
+    """Reconcile cumulative XBRL rollup periods against the discrete leaves they contain.
+
+    EDGAR XBRL filings include both discrete-quarter entries and cumulative YTD /
+    semi-annual / annual entries.  A naive drop of containers loses the dividend
+    for any discrete period that was never filed as a standalone quarter (e.g. a
+    company that rolls Q4 into the annual filing).
+
+    Algorithm (per ``cik``):
+
+    1. Classify every row as a **leaf** (contains no shorter interval for the same
+       cik) or a **container** (strictly contains ≥ 1 shorter interval).
+    2. Keep all leaves.
+    3. For each container ``C`` (value ``V_C``):
+
+       - ``S`` = sum of *leaf* amounts whose interval is strictly inside ``C``.
+         Nested containers are excluded from this sum — they will be dropped anyway.
+       - ``residual = round(V_C - S, 6)``.
+       - If ``residual > 0.0001`` and the leaves do not fully cover ``C``'s span:
+         synthesize a single leaf Row with ``amount = residual``.  Its period is
+         the largest uncovered contiguous tail of ``C`` (from the last contained
+         leaf's ``period_end`` to ``C.period_end``; if empty, the leading gap from
+         ``C.period_start`` to the first leaf's ``period_start``; if still empty,
+         fall back to ``C``'s full span).
+       - If ``residual <= 0.0001``: the discretes already account for the rollup
+         (full-discrete reporter) — synthesize nothing.
+       - If ``residual < 0``: data anomaly — synthesize nothing, log at DEBUG.
+       - Drop ``C`` in all cases.
+
+    4. Return leaves + synthesized rows in stable order (leaves in original input
+       order; synthesized rows appended).
+    """
+    from collections import defaultdict
+
+    def _strictly_contains(
+        a_start: str, a_end: str, b_start: str, b_end: str
+    ) -> bool:
+        """Return True iff interval A strictly contains interval B (lexicographic ISO dates)."""
+        return (
+            a_start <= b_start
+            and b_end <= a_end
+            and (a_start, a_end) != (b_start, b_end)
+        )
+
+    # Group row indices by cik
+    cik_indices: dict[int, list[int]] = defaultdict(list)
+    for idx, row in enumerate(rows):
+        cik_indices[row.cik].append(idx)
+
+    # Classify each row: leaf vs container
+    is_container: list[bool] = [False] * len(rows)
+    for cik, indices in cik_indices.items():
+        for i in indices:
+            a = rows[i]
+            for j in indices:
+                if i == j:
+                    continue
+                b = rows[j]
+                if _strictly_contains(a.period_start, a.period_end, b.period_start, b.period_end):
+                    is_container[i] = True
+                    break
+
+    leaves: list[Row] = [row for idx, row in enumerate(rows) if not is_container[idx]]
+
+    # Build leaf lookup per cik for fast residual computation
+    cik_leaves: dict[int, list[Row]] = defaultdict(list)
+    for row in leaves:
+        cik_leaves[row.cik].append(row)
+
+    synthesized: list[Row] = []
+
+    for idx, container in enumerate(rows):
+        if not is_container[idx]:
+            continue
+
+        # Sum only leaf amounts strictly inside this container
+        contained_leaves = [
+            leaf for leaf in cik_leaves[container.cik]
+            if _strictly_contains(
+                container.period_start, container.period_end,
+                leaf.period_start, leaf.period_end,
+            )
+        ]
+
+        leaf_sum = sum(leaf.amount for leaf in contained_leaves)
+        residual = round(container.amount - leaf_sum, 6)
+
+        if residual < 0:
+            logger.debug(
+                "reconcile_periods: cik=%d container [%s, %s] residual=%.6f < 0 — "
+                "leaf sum exceeds rollup (data anomaly); dropping container without synth",
+                container.cik, container.period_start, container.period_end, residual,
+            )
+            continue  # drop container, no synth
+
+        if residual <= 0.0001:
+            # Full-discrete reporter: discretes account for the entire rollup
+            continue  # drop container, no synth
+
+        # Determine the uncovered span for the synthetic row.
+        # Sort contained leaves by period_end to find coverage gaps.
+        sorted_leaves = sorted(contained_leaves, key=lambda r: r.period_end)
+
+        synth_start: str
+        synth_end: str
+
+        if sorted_leaves:
+            # Primary: tail gap — from last leaf's period_end to container's period_end
+            tail_start = sorted_leaves[-1].period_end
+            tail_end = container.period_end
+            if tail_start < tail_end:
+                synth_start = tail_start
+                synth_end = tail_end
+            else:
+                # Secondary: leading gap — from container's period_start to first leaf's period_start
+                lead_start = container.period_start
+                lead_end = sorted_leaves[0].period_start
+                if lead_start < lead_end:
+                    synth_start = lead_start
+                    synth_end = lead_end
+                else:
+                    # Fallback: use container's full span
+                    synth_start = container.period_start
+                    synth_end = container.period_end
+        else:
+            # No contained leaves at all — use container's full span
+            synth_start = container.period_start
+            synth_end = container.period_end
+
+        synth = Row(
+            cik=container.cik,
+            period_start=synth_start,
+            period_end=synth_end,
+            amount=residual,
+            concept=container.concept,
+            accn=container.accn,
+            form=container.form,
+        )
+        synthesized.append(synth)
+
+    return leaves + synthesized
 
 
 # ---------------------------------------------------------------------------

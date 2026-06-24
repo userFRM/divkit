@@ -117,8 +117,16 @@ def test_write_manifest_flat_format(tmp_path):
         assert hex_part == expected, f"digest mismatch for {filename}: got {hex_part}, expected {expected}"
 
 
-def test_write_year_shards_drops_cumulative_annual(tmp_path):
-    """Cumulative annual row that contains discrete quarters must not appear in written parquet."""
+def test_write_year_shards_reconciles_cumulative_annual(tmp_path):
+    """Reconciliation: cumulative annual row is dropped; missing Q4 residual is synthesized.
+
+    cik=10 (KO-like): Q1–Q3 filed discretely (0.51 each), annual rollup = 2.04.
+    reconcile_periods drops the annual and synthesizes a Q4 leaf (residual ≈ 0.51).
+    The parquet shard must contain 4 rows for cik=10 summing to 2.04, with the
+    raw annual value 2.04 absent from the amounts column.
+
+    cik=20 (pure annual payer): single annual row, no sub-periods → leaf → kept as-is.
+    """
     # cik=10 has 3 discrete quarters in 2025 + 1 annual cumulative (KO-like)
     q1 = Row(cik=10, period_start="2025-01-01", period_end="2025-03-28",
              amount=0.51, concept="Declared", accn="10-q1", form="10-Q")
@@ -140,13 +148,21 @@ def test_write_year_shards_drops_cumulative_annual(tmp_path):
     d = table.to_pydict()
 
     amounts = d["amount"]
-    # Cumulative annual $2.04 for cik=10 must not appear
+    # Cumulative annual $2.04 must not appear as a raw row value
     assert 2.04 not in amounts, f"Cumulative annual $2.04 must not appear in parquet; amounts={amounts}"
 
-    # All 3 discrete quarters for cik=10 must survive
+    # cik=10 must have 4 rows (Q1+Q2+Q3 + synthesized Q4) summing to 2.04
     cik10_amounts = [a for cik, a in zip(d["cik"], amounts) if cik == 10]
-    assert len(cik10_amounts) == 3, f"Expected 3 quarter rows for cik=10, got {len(cik10_amounts)}"
-    assert all(a == 0.51 for a in cik10_amounts), f"All quarter amounts must be $0.51, got {cik10_amounts}"
+    assert len(cik10_amounts) == 4, (
+        f"Expected 4 rows for cik=10 (3 discrete + 1 synthesized Q4), got {len(cik10_amounts)}"
+    )
+    assert abs(sum(cik10_amounts) - 2.04) < 1e-4, (
+        f"cik=10 amounts must sum to 2.04, got {sum(cik10_amounts)}"
+    )
+    # The 3 original quarters must be present
+    assert cik10_amounts.count(0.51) >= 3, (
+        f"Expected at least 3 rows of $0.51 for cik=10, got {cik10_amounts}"
+    )
 
     # Pure annual payer (cik=20) must be kept
     cik20_amounts = [a for cik, a in zip(d["cik"], amounts) if cik == 20]

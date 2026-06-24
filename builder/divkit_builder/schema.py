@@ -14,7 +14,7 @@ from typing import Iterable
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .frames import Row, _merge_prefer_declared, drop_cumulative_periods
+from .frames import Row, _merge_prefer_declared, reconcile_periods
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +52,11 @@ def write_year_shards(
     """
     all_rows: list[Row] = list(rows)
 
-    # 1. Drop cumulative / YTD / annual periods that contain shorter discrete periods
-    #    for the same cik.  Must run before (cik, period_end) dedup so the dedup key
-    #    is unambiguous across only discrete-quarter entries.
-    filtered = drop_cumulative_periods(all_rows)
+    # 1. Reconcile cumulative / YTD / annual periods against the discrete leaves they
+    #    contain.  Containers are dropped; a synthetic leaf is emitted when the leaf
+    #    sum falls short of the rollup value (recovering e.g. a missing Q4).  Must run
+    #    before (cik, period_end) dedup so the dedup key applies only to discrete rows.
+    filtered = reconcile_periods(all_rows)
 
     # 2. Dedup by (cik, period_end) preferring Declared
     deduped = _merge_prefer_declared(filtered)

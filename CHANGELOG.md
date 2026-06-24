@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [0.0.3] — 2026-06-24
+
+### Changed
+
+- Bump `arrow` and `parquet` to 54. `arrow-arith` 53.4 and `chrono` 0.4.40+ both expose a `quarter()` method, which causes an ambiguous-method compile error in any workspace that pins chrono at or above 0.4.40 through another dependency; arrow 54 resolves it.
+
 ## [0.0.2] — 2026-06-24
 
 ### Added

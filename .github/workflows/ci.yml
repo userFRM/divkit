@@ -55,7 +55,9 @@ jobs:
         run: pip install -e builder
 
       - name: Lint (ruff)
-        run: ruff check builder
+        run: |
+          pip install ruff
+          ruff check builder
 
       - name: Tests (pytest)
         run: pytest builder/tests

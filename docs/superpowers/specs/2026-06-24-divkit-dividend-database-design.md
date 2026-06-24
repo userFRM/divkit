@@ -6,7 +6,7 @@ US equity dividend database for Rust. Per-share cash dividends and dividend yiel
 
 Give a Rust caller, for any US-listed ticker:
 
-- the **trailing-12-month per-share cash dividend** — the `annual_div` input that ThetaData's Greeks endpoints require for Black-Scholes (ThetaData itself ignores dividends and only accepts this value as a parameter)
+- the **trailing-12-month per-share cash dividend** — the `annual_div` input that option-Greeks engines require for Black-Scholes (such engines commonly ignore dividends and only accept this value as a caller-provided parameter)
 - the **full per-period dividend history**, 10+ years deep
 - a **dividend yield** given a spot price the caller supplies
 
@@ -109,7 +109,7 @@ let annual = divkit::annual_dividend_for("AAPL").await?;
 - `DividendSnapshot { ticker, cik, annual_amount: f64, frequency: Frequency, history: Vec<DivEvent> }`.
   - `annual_amount` = sum of cash dividends with `period_end` in the trailing 365 days (falls back to 4× most-recent quarterly when only sparse periods exist; documented).
   - `yield_on(price: f64) -> f64` — `annual_amount / price`. Pure, price-free crate stays single-source-of-truth.
-  - `yield_with(&impl PriceProvider) -> Result<f64>` — optional precomputed yield; `PriceProvider` is a one-method trait the caller wires to their own ThetaData/quote source. divkit ships no price feed (keeps the corporate-actions domain boundary clean).
+  - `yield_with(&impl PriceProvider) -> Result<f64>` — optional precomputed yield; `PriceProvider` is a one-method trait the caller wires to their own market-data/quote source. divkit ships no price feed (keeps the corporate-actions domain boundary clean).
 - `Frequency` — inferred cadence (`Quarterly`/`SemiAnnual`/`Annual`/`Irregular`/`None`) from period spacing.
 - `Error` / `Result` — one unified error enum.
 

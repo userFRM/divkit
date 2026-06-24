@@ -1,0 +1,2 @@
+[console_scripts]
+divkit-build = divkit_builder.build:main

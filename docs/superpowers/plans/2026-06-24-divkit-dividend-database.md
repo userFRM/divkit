@@ -513,7 +513,7 @@ Expected: FAIL — `PriceProvider` not defined.
 
 ```rust
 //! `PriceProvider` — caller-supplied spot price source for precomputed yield.
-//! divkit ships no price feed; wire this to your own ThetaData/quote source.
+//! divkit ships no price feed; wire this to your own market-data/quote source.
 use crate::Result;
 
 pub trait PriceProvider {

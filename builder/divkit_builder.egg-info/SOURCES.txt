@@ -1,0 +1,9 @@
+pyproject.toml
+divkit_builder/__init__.py
+divkit_builder.egg-info/PKG-INFO
+divkit_builder.egg-info/SOURCES.txt
+divkit_builder.egg-info/dependency_links.txt
+divkit_builder.egg-info/entry_points.txt
+divkit_builder.egg-info/requires.txt
+divkit_builder.egg-info/top_level.txt
+tests/test_sec.py

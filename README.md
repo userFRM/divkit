@@ -69,11 +69,11 @@ async fn main() -> divkit::Result<()> {
 }
 ```
 
-## Black-Scholes / ThetaData integration
+## Black-Scholes / option-Greeks integration
 
 The primary use case for `annual_dividend` is supplying the continuous dividend
-yield parameter to Black-Scholes pricing. ThetaData's Greeks endpoints accept
-a dividend yield as a caller-provided parameter and do not compute it
+yield parameter to Black-Scholes option pricing. Many Greeks engines accept a
+dividend yield as a caller-provided parameter rather than computing it
 themselves. `divkit` closes that gap:
 
 ```rust
@@ -86,8 +86,8 @@ async fn bs_dividend_yield(ticker: &str, spot: f64) -> divkit::Result<f64> {
 }
 ```
 
-Pass the result as the `annual_div` (or dividend yield) argument when calling
-ThetaData's Greeks endpoint.
+Pass the result as the annual-dividend (or dividend-yield) argument to your
+option-pricing or Greeks routine.
 
 ## Data source and limitations
 

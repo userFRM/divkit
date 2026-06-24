@@ -42,9 +42,9 @@ This intentionally diverges from `curvekit`, whose nightly is pure Rust: Treasur
 
 Produces `data/dividends-YYYY.parquet` sharded by dividend period-end year.
 
-**Backfill — full 10-year (configurable, default 2015→present) history.** Two passes for completeness:
+**Backfill — maximum-available history (configurable `--from-year`, default = earliest XBRL ~2009→present, ~15 years).** XBRL was phased in 2009–2011, so pre-2011 coverage is sparser but is included for completeness. Two passes:
 
-1. **Frames sweep (primary).** For each quarter `CY{year}Q{n}` from the start year to present, GET
+1. **Frames sweep (primary).** For each quarter `CY{year}Q{n}` from the start year to present (~60 quarters at max depth), GET
    `https://data.sec.gov/api/xbrl/frames/us-gaap/{concept}/USD-per-shares/CY{Y}Q{Q}.json`
    for both concepts. Each call returns *every* filer that reported that concept for that period — one request covers ~1,000+ companies. ~40 quarters × 2 concepts ≈ 80 requests for a decade. Entry fields: `accn, cik, entityName, loc, start, end, val`. Accumulate per `(cik, end)`, preferring *Declared* over *CashPaid* on conflict.
 2. **Bulk completeness pass.** Download `https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip` (~1.39 GB, refreshed daily). For each company JSON, extract the two dividend concepts to capture off-calendar fiscal periods and annual-only filers the quarterly frames miss. Union into the frames result, deduped by `(cik, end, concept-priority)`.
@@ -118,7 +118,7 @@ let annual = divkit::annual_dividend_for("AAPL").await?;
 ### CI / Actions (`.github/workflows/`)
 
 - `nightly.yml` — daily after EDGAR's nightly XBRL refresh: run builder delta, commit `data/` if changed. Schedule chosen to fire *after* SEC publishes (EDGAR refreshes ~04:00–06:00 UTC).
-- `backfill.yml` — `workflow_dispatch`, full 10-year rebuild (allows the 1.39 GB completeness pass; longer timeout).
+- `backfill.yml` — `workflow_dispatch`, full max-depth (~2009→present) rebuild (allows the 1.39 GB completeness pass; longer timeout). `from_year` input overrides depth.
 - `ci.yml` — `cargo test` + `clippy -D warnings` + `fmt --check`; lint the Python builder (`ruff`); validate parquet schema + manifest.
 - `release.yml` — tag-driven crates.io publish.
 

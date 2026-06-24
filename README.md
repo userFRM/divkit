@@ -190,7 +190,7 @@ policy). CI uses the `CONTACT_EMAIL` repository secret.
 
 Two GitHub Actions workflows keep the data current:
 
-- **nightly.yml** — cron `0 3 * * 1-5` (03:00 UTC, Mon–Fri): appends the latest
+- **nightly.yml** — cron `0 7 * * *` (07:00 UTC, daily): appends the latest
   EDGAR filings to the current-year shard via `divkit-cli nightly`.
 - **backfill.yml** — `workflow_dispatch`: full historical fetch across all years.
 

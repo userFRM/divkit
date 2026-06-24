@@ -76,37 +76,46 @@ impl DividendSnapshot {
         }
     }
 
-    /// Trailing 12-month dividend sum anchored to *as_of*.
+    /// Trailing 12-month dividend sum, evaluated as of *as_of*.
     ///
-    /// Sums all distinct dividend events whose `period_end` falls in the
-    /// half-open window `(as_of − 365 days, as_of]`.  When the trailing sum
-    /// is zero the method falls back to annualizing the most-recent payment
-    /// by the detected frequency — but **only** when the most-recent
-    /// `period_end` is within 400 days of `as_of`.  A company that stopped
-    /// paying more than ~13 months ago returns `0.0` so the value decays
-    /// to zero rather than reporting a stale dividend.
+    /// `as_of` is used **only** as a staleness gate: if the most recently
+    /// reported dividend is older than ~400 days relative to `as_of`, the
+    /// company is treated as having stopped paying and `0.0` is returned.
+    ///
+    /// Otherwise the trailing-365-day window is anchored to the most recent
+    /// reported dividend (not to `as_of`).  EDGAR filing lag means the
+    /// current quarter is often not filed yet, so a window anchored to
+    /// today would catch only 3 of 4 quarterly payments and undercount an
+    /// active payer.  Anchoring to the last reported dividend yields the
+    /// complete annual figure.
     pub fn annual_amount_as_of(&self, as_of: NaiveDate) -> f64 {
         let ev = self.distinct();
         if ev.is_empty() {
             return 0.0;
         }
-        let cutoff = as_of - Duration::days(365);
+        let last = ev.last().unwrap().period_end;
+
+        // Staleness gate: a company whose most recent dividend predates
+        // `as_of` by more than ~400 days has stopped paying — decay to 0.
+        if (as_of - last).num_days() > 400 {
+            return 0.0;
+        }
+
+        // Trailing-365 sum anchored to the most recent reported dividend, so
+        // filing lag on the current quarter does not undercount active payers.
+        let cutoff = last - Duration::days(365);
         let trailing: f64 = ev
             .iter()
-            .filter(|e| e.period_end > cutoff && e.period_end <= as_of)
+            .filter(|e| e.period_end > cutoff && e.period_end <= last)
             .map(|e| e.amount)
             .sum();
         if trailing > 0.0 {
             return trailing;
         }
-        // Fallback: annualize the most-recent payment — but only when the
-        // payer is recent enough that silence reflects missing data, not a
-        // suspension.  400 days ≈ one quarter's grace beyond the annual window.
-        let most_recent = ev.last().unwrap();
-        if (as_of - most_recent.period_end).num_days() > 400 {
-            return 0.0;
-        }
-        let recent = most_recent.amount;
+
+        // Sparse history but `last` is recent (gate already passed): annualize
+        // the most-recent payment by inferred frequency.
+        let recent = ev.last().unwrap().amount;
         match self.frequency() {
             Frequency::Quarterly => recent * 4.0,
             Frequency::SemiAnnual => recent * 2.0,
@@ -115,12 +124,13 @@ impl DividendSnapshot {
         }
     }
 
-    /// Trailing 12-month dividend sum as of today.
+    /// Sum of the trailing 12 months of cash dividends ending at the most
+    /// recently reported dividend (so EDGAR filing lag does not undercount
+    /// active payers). Returns `0.0` if the most recent dividend is older
+    /// than ~400 days — a company that stopped paying decays to zero.
     ///
-    /// A company that stopped paying decays to `0.0` once its most recent
-    /// dividend falls more than ~13 months in the past.  Use
-    /// [`annual_amount_as_of`](Self::annual_amount_as_of) for deterministic
-    /// testing or historical back-calculations.
+    /// Use [`annual_amount_as_of`](Self::annual_amount_as_of) for
+    /// deterministic testing or historical back-calculations.
     pub fn annual_amount(&self) -> f64 {
         self.annual_amount_as_of(Utc::now().date_naive())
     }

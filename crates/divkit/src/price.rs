@@ -13,7 +13,6 @@ pub trait PriceProvider {
 mod tests {
     use super::*;
     use crate::{Concept, DivEvent, DividendSnapshot};
-    use chrono::NaiveDate;
 
     struct Fixed(f64);
     impl PriceProvider for Fixed {
@@ -29,10 +28,12 @@ mod tests {
 
     #[tokio::test]
     async fn yield_with_uses_provider_price() {
-        // 4 quarterly payments ending 2024-12-13; anchor annual_amount to that
-        // date so the trailing-365d sum is 1.94 regardless of when the test runs.
-        let mk = |end: &str, amt: f64| {
-            let d = NaiveDate::parse_from_str(end, "%Y-%m-%d").unwrap();
+        // 4 recent quarterly payments so annual_amount() (today-anchored, but
+        // the window is anchored to the last reported dividend) is a nonzero
+        // 1.94 and the gate passes regardless of when the test runs.
+        let today = chrono::Utc::now().date_naive();
+        let mk = |days_ago: i64, amt: f64| {
+            let d = today - chrono::Duration::days(days_ago);
             DivEvent {
                 period_start: d,
                 period_end: d,
@@ -46,20 +47,22 @@ mod tests {
             "KO".into(),
             21344,
             vec![
-                mk("2024-03-15", 0.485),
-                mk("2024-06-14", 0.485),
-                mk("2024-09-13", 0.485),
-                mk("2024-12-13", 0.485),
+                mk(280, 0.485),
+                mk(190, 0.485),
+                mk(100, 0.485),
+                mk(10, 0.485),
             ],
         );
-        // yield_with calls annual_amount() (today-anchored). Use yield_on with
-        // a known annual to keep the assertion deterministic.
+        // annual_amount() = 1.94 (4 payments within the trailing year ending at
+        // the most recent dividend, which is 10 days ago → gate passes).
+        let expected = 1.94 / 50.0;
         let y = snap.yield_on(50.0);
-        // annual_amount() today: last payment 2024-12-13 is >400 days ago, so
-        // trailing sum is 0 and fallback is gated → 0.0. yield_on returns 0.0.
-        // The deterministic path is tested in record::tests; here we verify the
-        // provider wiring is correct by using a provider-backed call.
+        assert!((y - expected).abs() < 1e-9, "yield_on mismatch: {y}");
+        // yield_with must route the provider's price into the same calculation.
         let y_via_provider = snap.yield_with(&Fixed(50.0)).await.unwrap();
-        assert_eq!(y, y_via_provider);
+        assert!(
+            (y_via_provider - expected).abs() < 1e-9,
+            "yield_with mismatch: {y_via_provider}"
+        );
     }
 }

@@ -1,0 +1,25 @@
+[package]
+name = "divkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation.workspace = true
+description = "US equity dividends and dividend yield for Rust, from SEC EDGAR public-domain XBRL. Companion to curvekit."
+
+[dependencies]
+thiserror.workspace = true
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+sha2 = { workspace = true }
+arrow = { workspace = true }
+parquet = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -56,8 +56,18 @@ def fetch_quarter(concept: str, year: int, q: int) -> list[Row]:
             return []
         raise
 
+    if "data" not in data:
+        logger.warning(
+            "frames %s CY%dQ%d: 200 response missing 'data' key "
+            "(possible SEC schema change)",
+            concept,
+            year,
+            q,
+        )
+        return []
+
     rows: list[Row] = []
-    for entry in data.get("data", []):
+    for entry in data["data"]:
         rows.append(
             Row(
                 cik=entry["cik"],

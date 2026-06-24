@@ -19,6 +19,14 @@ def test_parse_frame_entries(monkeypatch):
     assert rows[0].period_end == data["data"][0]["end"]
 
 
+def test_missing_data_key_returns_empty(monkeypatch):
+    from divkit_builder import frames
+
+    monkeypatch.setattr(frames, "_get_json", lambda url: {"taxonomy": "us-gaap"})
+    rows = frames.fetch_quarter("CommonStockDividendsPerShareDeclared", 2022, 1)
+    assert rows == []
+
+
 def test_declared_preferred_over_cashpaid():
     from divkit_builder.frames import Row, _merge_prefer_declared
 

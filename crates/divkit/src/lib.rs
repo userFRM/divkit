@@ -25,30 +25,8 @@
 //! }
 //! ```
 //!
-//! # Client pattern (connection-pool reuse)
-//!
-//! Create [`Divkit`] once and reuse it across calls to share the internal
-//! reqwest connection pool.
-//!
-//! ```no_run
-//! use divkit::Divkit;
-//!
-//! #[tokio::main]
-//! async fn main() -> divkit::Result<()> {
-//!     let client = Divkit::new();
-//!
-//!     // Annual dividend (trailing 12 months)
-//!     if let Some(amt) = client.annual_dividend("KO").await? {
-//!         println!("KO: ${amt:.4}");
-//!     }
-//!
-//!     // Snapshot with frequency detection and yield helper
-//!     let snap = client.dividend_snapshot("MSFT").await?;
-//!     println!("MSFT frequency: {:?}", snap.frequency());
-//!     println!("MSFT yield at $420: {:.2}%", snap.yield_on(420.0) * 100.0);
-//!     Ok(())
-//! }
-//! ```
+//! For connection-pool reuse across many lookups, create a [`Divkit`] client
+//! once and call its methods instead of the free functions.
 #![forbid(unsafe_code)]
 
 mod error;

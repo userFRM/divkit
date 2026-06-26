@@ -104,7 +104,7 @@ fn writer_props() -> WriterProperties {
         .set_compression(Compression::ZSTD(
             ZstdLevel::try_new(3).expect("valid zstd level"),
         ))
-        .set_max_row_group_size(10_000)
+        .set_max_row_group_row_count(Some(10_000))
         .build()
 }
 

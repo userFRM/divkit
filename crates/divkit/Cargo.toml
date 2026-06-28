@@ -6,6 +6,15 @@ license.workspace = true
 repository.workspace = true
 documentation.workspace = true
 description = "US equity dividends and dividend yield for Rust, from SEC EDGAR public-domain XBRL. Companion to curvekit."
+readme = "../../README.crates.md"
+exclude = [
+    "/data",
+    "/docs",
+    "/.github",
+    "/cli",
+    "/builder",
+    "CONTRIBUTING.md",
+]
 
 [dependencies]
 thiserror.workspace = true

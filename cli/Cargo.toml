@@ -9,7 +9,7 @@ name = "divkit-cli"
 path = "src/main.rs"
 
 [dependencies]
-divkit = { path = "../crates/divkit" }
+divkit = { path = "../crates/divkit", version = "0.0.3" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 clap = { version = "4", features = ["derive"] }

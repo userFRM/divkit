@@ -6,7 +6,7 @@ members = ["crates/divkit", "cli"]
 version = "0.0.3"
 edition = "2021"
 authors = ["userFRM"]
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/userFRM/divkit"
 documentation = "https://docs.rs/divkit"
 
@@ -22,5 +22,5 @@ reqwest = { version = "0.12", features = ["json", "gzip", "stream"] }
 bytes = "1"
 futures = "0.3"
 sha2 = "0.10"
-arrow = "54"
-parquet = "54"
+arrow = "58"
+parquet = "58"

@@ -1,64 +1,33 @@
 name: CI
-
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+permissions:
+  contents: read
 
 jobs:
-  rust:
-    name: fmt + clippy + test (Rust)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  ci:
+    uses: userFRM/kit-ci/.github/workflows/ci.yml@28fc202d7ddafe5c5ee6886da01027f8342d3673
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Tests
-        run: cargo test --all
-
+  # divkit-specific: the Python parquet builder is not covered by the shared
+  # Rust CI, so it keeps its own lint + test + shard-validation job.
   python:
     name: ruff + pytest (Python builder)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install builder
         run: pip install -e builder pytest ruff
-
       - name: Lint (ruff)
         run: ruff check builder
-
       - name: Tests (pytest)
         run: pytest builder/tests
-
       - name: Validate parquet shards
         run: python -m divkit_builder.build validate --out data
